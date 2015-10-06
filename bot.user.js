@@ -21,15 +21,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.*/
 
 // ==UserScript==
-// @name        AposBot
-// @namespace   AposBot
+// @name        AposSplitBot
+// @namespace   AposSplitBot
 // @include     http://agar.io/*
-// @version     3.641
+// @version     3.655
 // @grant       none
 // @author      http://www.twitch.tv/apostolique
 // ==/UserScript==
 
-var aposBotVersion = 3.641;
+var aposBotVersion = 3.655;
 
 //TODO: Team mode
 //      Detect when people are merging
@@ -101,7 +101,6 @@ window.botList = window.botList || [];
 
 /*function QuickBot() {
     this.name = "QuickBot V1";
-    this.customParameters = {};
     this.keyAction = function(key) {};
     this.displayText = function() {return [];};
     this.mainLoop = function() {
@@ -113,7 +112,7 @@ window.botList = window.botList || [];
 window.botList.push(new QuickBot());*/
 
 function AposBot() {
-    this.name = "AposBot " + aposBotVersion;
+    this.name = "AposSplitBot " + aposBotVersion;
 
     this.toggleFollow = false;
     this.keyAction = function(key) {
@@ -136,6 +135,34 @@ function AposBot() {
     };
     this.splitDistance = 710;
 
+    this.previousLoopTime = new Date().getTime();
+    this.previousBlobList = [];
+    this.disguiseDangerVelocityWeight = 1.19;
+    this.followtime = 0
+    
+    this.isMerging = function(cell1, cell2) {        
+        var dist = this.computeDistance(cell1.x, cell1.y, cell2.x, cell2.y, cell1.size, cell2.size);
+        
+        //debug logging
+        if (false){
+        var params = [cell1.x, cell1.y, cell2.x, cell2.y, cell1.size, cell2.size, dist];
+        var debugString = params.join(", ");
+        console.log("Merge:" + debugString);
+        }
+        
+        return dist <= -50;
+    };
+    
+    this.computeVelocity = function( blob ) {
+        if ( blob.prev_x === undefined || blob.prev_y === undefined ) {
+            return [ 0.0, 0.0, 0.0 ];
+        }
+        var dx = blob.x - blob.prev_x;
+        var dy = blob.y - blob.prev_y;
+        var d = this.computeDistance( blob.prev_x, blob.prev_y, blob.x, blob.y );
+        var t = ( new Date().getTime() - this.previousLoopTime ) / 100;
+        return [ dx / t, dy / t, d / t ];
+    };
     //Given an angle value that was gotten from valueAndleBased(),
     //returns a new value that scales it appropriately.
     this.paraAngleValue = function(angleValue, range) {
@@ -210,7 +237,7 @@ function AposBot() {
     },
 
     this.canSplit = function(player1, player2) {
-        return this.compareSize(player1, player2, 2.8) && !this.compareSize(player1, player2, 20);
+        return this.compareSize(player1, player2, 2.8) && !this.compareSize(player1, player2, 4);
     };
 
     this.isItMe = function(player, cell) {
@@ -269,8 +296,13 @@ function AposBot() {
         }
         return false;
     };
-
+    
     this.isVirus = function(blob, cell) {
+        if (blob == null) {
+            if (cell.isVirus()){return true;} 
+            else {return false;}
+        }
+        
         if (cell.isVirus() && this.compareSize(cell, blob, 1.2)) {
             return true;
         } else if (cell.isVirus() && cell.color.substring(3,5).toLowerCase() != "ff") {
@@ -297,6 +329,8 @@ function AposBot() {
         var splitTargetList = [];
 
         var player = getPlayer();
+        
+        var mergeList = [];
 
         Object.keys(listToUse).forEach(function(element, index) {
             var isMe = that.isItMe(player, listToUse[element]);
@@ -310,6 +344,7 @@ function AposBot() {
                 } else if (that.isThreat(blob, listToUse[element])) {
                     //IT'S DANGER!
                     threatList.push(listToUse[element]);
+                    mergeList.push(listToUse[element]);
                 } else if (that.isVirus(blob, listToUse[element])) {
                     //IT'S VIRUS!
                     virusList.push(listToUse[element]);
@@ -317,7 +352,10 @@ function AposBot() {
                 else if (that.isSplitTarget(that, blob, listToUse[element])) {
                         drawCircle(listToUse[element].x, listToUse[element].y, listToUse[element].size + 50, 7);
                         splitTargetList.push(listToUse[element]);
-                        foodElementList.push(listToUse[element]);
+                        //foodElementList.push(listToUse[element]);
+                        mergeList.push(listToUse[element]);
+                }
+                else {if (that.isVirus(null, listToUse[element])==false) {mergeList.push(listToUse[element]);}
                     }
             }/*else if(isMe && (getBlobCount(getPlayer()) > 0)){
                 //Attempt to make the other cell follow the mother one
@@ -329,7 +367,37 @@ function AposBot() {
         for (var i = 0; i < foodElementList.length; i++) {
             foodList.push([foodElementList[i].x, foodElementList[i].y, foodElementList[i].size]);
         }
-
+        
+        //console.log("Merglist length: " +  mergeList.length)
+        //cell merging
+        for (var i = 0; i < mergeList.length; i++) {
+            for (var z = 0; z < mergeList.length; z++) {
+                if (z != i && that.isMerging(mergeList[i], mergeList[z])) { //z != i && 
+                        //found cells that appear to be merging - if they constitute a threat add them to the theatlist
+                        
+                        //clone us a new cell
+                        var newThreat = {};
+                        var prop;
+                        
+                        for (prop in mergeList[i]) {
+                            newThreat[prop] = mergeList[i][prop];
+                        }
+                        
+                        //average distance and sum the size
+                        newThreat.x = (mergeList[i].x + mergeList[z].x)/2;
+                        newThreat.y = (mergeList[i].y + mergeList[z].y)/2;
+                        newThreat.size = (mergeList[i].size + mergeList[z].size);
+                        newThreat.nopredict = true;
+                        //check its a threat
+                        if (that.isThreat(blob, newThreat)) {
+                             //IT'S DANGER!
+                            threatList.push(newThreat);
+                        }   
+                                          
+                }
+            }
+        }
+        
         return [foodList, threatList, virusList, splitTargetList];
     };
 
@@ -813,11 +881,6 @@ function AposBot() {
             var tempMoveX = getPointX();
             var tempMoveY = getPointY();
 
-            drawLine(getX() - (1920 / 2) / getZoomlessRatio(), getY() - (1080 / 2) / getZoomlessRatio(), getX() + (1920 / 2) / getZoomlessRatio(), getY() - (1080 / 2) / getZoomlessRatio(), 7);
-            drawLine(getX() - (1920 / 2) / getZoomlessRatio(), getY() + (1080 / 2) / getZoomlessRatio(), getX() + (1920 / 2) / getZoomlessRatio(), getY() + (1080 / 2) / getZoomlessRatio(), 7);
-            drawLine(getX() - (1920 / 2) / getZoomlessRatio(), getY() - (1080 / 2) / getZoomlessRatio(), getX() - (1920 / 2) / getZoomlessRatio(), getY() + (1080 / 2) / getZoomlessRatio(), 7);
-            drawLine(getX() + (1920 / 2) / getZoomlessRatio(), getY() - (1080 / 2) / getZoomlessRatio(), getX() + (1920 / 2) / getZoomlessRatio(), getY() + (1080 / 2) / getZoomlessRatio(), 7);
-
             //This variable will be returned at the end.
             //It will contain the destination choices for all the cells.
             //BTW!!! ERROR ERROR ABORT MISSION!!!!!!! READ BELOW -----------
@@ -828,17 +891,17 @@ function AposBot() {
 
             //Just to make sure the player is alive.
             if (player.length > 0) {
-
+				
                 //Loop through all the player's cells.
                 for (var k = 0; k < player.length; k++) {
                     if (true) {
                         drawPoint(player[k].x, player[k].y + player[k].size, 0, "" + (getLastUpdate() - player[k].birth) + " / " + (30000 + (player[k].birthMass * 57) - (getLastUpdate() - player[k].birth)) + " / " + player[k].birthMass);
-                    }
+                    }player.length -1
                 }
 
 
                 //Loops only for one cell for now.
-                for (var k = 0; /*k < player.length*/ k < 1; k++) {
+                for (var k = player.length - 1; k < player.length; k++) {
 
                     //console.log("Working on blob: " + k);
 
@@ -857,6 +920,12 @@ function AposBot() {
                     var allPossibleThreats = allIsAll[1];
                     //The viruses are stored in element 2 of allIsAll
                     var allPossibleViruses = allIsAll[2];
+                    //The split targets are stored in element 2 of allIsAll
+                    var allPossibleVictims = allIsAll[3];
+                    var victim = null;
+                    var range = player[k].size + this.splitDistance  
+                    var threatInRange = false
+                    //setTimeout(split, 80);
 
                     //The bot works by removing angles in which it is too
                     //dangerous to travel towards to.
@@ -869,15 +938,80 @@ function AposBot() {
                     var clusterAllFood = this.clusterFood(allPossibleFood, player[k].size);
 
                     //console.log("Looking for enemies!");
-
+                    var otherCellInDanger = false
+                    var predictiveThreats = []
                     //Loop through all the cells that were identified as threats.
                     for (var i = 0; i < allPossibleThreats.length; i++) {
+                        
+                      if (allPossibleThreats[i].nopredict != true) {
+                        var enemyX = allPossibleThreats[i].x;
+                        var enemyY = allPossibleThreats[i].y;
+                        //prediction
+                        var enemyVelocity = this.computeVelocity(allPossibleThreats[i]);
+                        
+                        var enemyXOffset = ( enemyVelocity[ 0 ] < 0 ? -1 : 1 ) * Math.pow( enemyVelocity[ 0 ] < 0 ? -enemyVelocity[ 0 ] : enemyVelocity[ 0 ], 1.3 );
+                        var enemyYOffset = ( enemyVelocity[ 1 ] < 0 ? -1 : 1 ) * Math.pow( enemyVelocity[ 1 ] < 0 ? -enemyVelocity[ 1 ] : enemyVelocity[ 1 ], 1.3 );
+                        
+                        enemyX += enemyXOffset;
+                        enemyY += enemyYOffset;    
+                        
+                        var newThreat = {};
+                        var prop;
 
+                        for (prop in allPossibleThreats[i]) {
+                            newThreat[prop] = allPossibleThreats[i][prop];
+                        }
+                        
+                        newThreat.x = enemyX;
+                        newThreat.y = enemyY;
+                        
+                        var newThreatDistance = this.computeDistance(newThreat.x, newThreat.y, player[k].x, player[k].y, newThreat.size);
+                        
+                        newThreat.enemyDist = newThreatDistance;    
+                        
+                        predictiveThreats.push(newThreat);
+                         
+                       } else {
                         var enemyDistance = this.computeDistance(allPossibleThreats[i].x, allPossibleThreats[i].y, player[k].x, player[k].y, allPossibleThreats[i].size);
-
-                        allPossibleThreats[i].enemyDist = enemyDistance;
+                        
+                        allPossibleThreats[i].enemyDist = enemyDistance;  
+                        predictiveThreats.push(allPossibleThreats[i]);
+                       }
+                        /*      
+                        var futureThreat = allPossibleThreats[i];
+                        futureThreat.x += enemyXOffset;
+                        futureThreat.y += enemyYOffset;
+                        futureThreat.enemyDist = this.computeDistance(futureThreat.x, futureThreat.y, player[k].x, player[k].y, futureThreat.size);
+                        
+                       
+                        */
+                        //multi cell control
+                        //Check if closer to other player-cells (when split)
+                        /*
+                        var closestEnemyDistanceToOtherPlayer = enemyDistance;
+                        
+                            var zIndex = 0
+                            for (var z = 1; z < player.length; z++) {
+                                  //console.log("Checking to see if I need to run!");
+                                var enemyDistanceToOtherPlayer = this.computeDistance(allPossibleThreats[i].x, allPossibleThreats[i].y, player[z].x, player[z].y, allPossibleThreats[i].size);
+                                if (closestEnemyDistanceToOtherPlayer > enemyDistanceToOtherPlayer) {
+                                    zIndex = z;
+                                    closestEnemyDistanceToOtherPlayer = enemyDistanceToOtherPlayer;
+                                    }                               
+                                
+                            }
+                       
+                        //found a problem
+                        
+                            if (closestEnemyDistanceToOtherPlayer < enemyDistance) {
+                            //console.log("Other cell " + (zIndex + 1) + " in danger - player " + (k + 1) + " of " + player.length + "opting out of this round!");
+                            otherCellInDanger = true;
+                            }
+                         */
                     }
-
+                    
+                    allPossibleThreats = predictiveThreats;
+                  
                     /*allPossibleThreats.sort(function(a, b){
                         return a.enemyDist-b.enemyDist;
                     })*/
@@ -885,7 +1019,9 @@ function AposBot() {
                     for (var i = 0; i < allPossibleThreats.length; i++) {
 
                         var enemyDistance = this.computeDistance(allPossibleThreats[i].x, allPossibleThreats[i].y, player[k].x, player[k].y);
-
+         
+                        if (enemyDistance < range)  {threatInRange = true;}
+                        
                         var splitDangerDistance = allPossibleThreats[i].size + this.splitDistance + 150;
 
                         var normalDangerDistance = allPossibleThreats[i].size + 150;
@@ -950,6 +1086,22 @@ function AposBot() {
                         //console.log("Done with enemy: " + i);
                     }
 
+                    //Loop through all the cells that were identified as victims.
+                    
+                    for (var i = 0; i < allPossibleVictims.length; i++) {
+                        var victimDistance = this.computeDistance(allPossibleVictims[i].x, allPossibleVictims[i].y, player[k].x, player[k].y, allPossibleVictims[i].size);
+     
+                        if (victimDistance < range){
+                         if (victim === null) {
+                            victim = allPossibleVictims[i];
+                            continue;
+                           }
+                        
+                         if (allPossibleVictims[i].size > victim.size) {                                            
+                             victim = allPossibleVictims[i];
+                            }
+                        }
+                    }
                     //console.log("Done looking for enemies!");
 
                     var goodAngles = [];
@@ -1098,6 +1250,7 @@ function AposBot() {
                         //tempMoveY = destination[1];
 
                     } else if (goodAngles.length > 0) {
+                        this.followtime = 0;
                         var bIndex = goodAngles[0];
                         var biggest = goodAngles[0][1];
                         for (var i = 1; i < goodAngles.length; i++) {
@@ -1117,10 +1270,10 @@ function AposBot() {
                         drawLine(player[k].x, player[k].y, line1[0], line1[1], 7);
                         //tempMoveX = line1[0];
                         //tempMoveY = line1[1];
-                    } else if (badAngles.length > 0 && goodAngles.length === 0) {
+                    }/*else if (badAngles.length > 0 && goodAngles.length === 0) {
                         //When there are enemies around but no good angles
                         //You're likely screwed. (This should never happen.)
-
+                        this.followtime = 0;
                         console.log("Failed");
                         destinationChoices = [tempMoveX, tempMoveY];
                         /*var angleWeights = [] //Put weights on the angles according to enemy distance
@@ -1139,8 +1292,42 @@ function AposBot() {
                         }
                         var line1 = this.followAngle(finalAngle,player[k].x,player[k].y,f.verticalDistance());
                         drawLine(player[k].x, player[k].y, line1[0], line1[1], 2);
-                        destinationChoices.push(line1);*/
+                        destinationChoices.push(line1);
+                         }*/ else if (victim !== null) {
+                            //split vitim found
+                            //work out where they are going
+                            var victimX = victim.x;
+                            var victimY = victim.y;
+                        
+                            var enemyVelocity = this.computeVelocity(victim);
+                        
+                            var victimXOffset = ( enemyVelocity[ 0 ] < 0 ? -1 : 1 ) * Math.pow( enemyVelocity[ 0 ] < 0 ? -enemyVelocity[ 0 ] : enemyVelocity[ 0 ], this.disguiseDangerVelocityWeight );
+                            var victimYOffset = ( enemyVelocity[ 1 ] < 0 ? -1 : 1 ) * Math.pow( enemyVelocity[ 1 ] < 0 ? -enemyVelocity[ 1 ] : enemyVelocity[ 1 ], this.disguiseDangerVelocityWeight );
+                        
+                            victimX += victimXOffset;
+                            victimY += victimYOffset;
+                        
+                            //increment followtime
+                            this.followtime += 1;
+                        
+                            var distance = this.computeDistance(player[k].x, player[k].y, victimX, victimY);
+                            var range = player[k].size + 710;
+                        
+                            //console.log("victim found - distance: " + distance + " range:" + range);
+                            //console.log("victim momentum - x: " + victimXOffset  + " y:" + victimYOffset); 
+                            //console.log("threatInRange = " + threatInRange)
+                             
+                            var shiftedAngle = this.shiftAngle(obstacleAngles, this.getAngle(victimX, victimY, player[k].x, player[k].y), [0, 360]);
+                            destinationChoices = this.followAngle(shiftedAngle, player[k].x, player[k].y, distance);
+                            drawLine(player[k].x, player[k].y, victimX, victimY, 5);
+                            if (distance < range/1.7 && threatInRange == false && this.followtime > 40) { //&& player.length == 1
+                                  //console.log("spliting");
+                                  this.followtime = 0;
+                                  setTimeout(split, 0);
+                                  }
+                            
                     } else if (clusterAllFood.length > 0) {
+                        this.followtime = 0;
                         for (var i = 0; i < clusterAllFood.length; i++) {
                             //console.log("mefore: " + clusterAllFood[i][2]);
                             //This is the cost function. Higher is better.
@@ -1180,6 +1367,7 @@ function AposBot() {
                         //tempMoveY = destination[1];
                         drawLine(player[k].x, player[k].y, destination[0], destination[1], 1);
                     } else {
+                        this.followtime = 0;
                         //If there are no enemies around and no food to eat.
                         destinationChoices = [tempMoveX, tempMoveY];
                     }
@@ -1221,7 +1409,18 @@ function AposBot() {
             //console.log("MOVING RIGHT NOW!");
 
             //console.log("______Never lied ever in my life.");
+            //all threats and victims
+            this.previousBlobList = allIsAll[1].concat(allIsAll[3]);
 
+			       // Update prev_x and prev_y from all blobs in previousBlobList
+        	   // This is used for calculating blob velocity
+       		   for(var i = 0; i < this.previousBlobList.length; i++) {
+            	   this.previousBlobList[i].prev_x = this.previousBlobList[i].x;
+            	   this.previousBlobList[i].prev_y = this.previousBlobList[i].y;
+        	   }
+
+        	   this.previousLoopTime = new Date().getTime();
+            
             return destinationChoices;
         }
     };
