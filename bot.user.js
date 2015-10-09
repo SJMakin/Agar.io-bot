@@ -10,15 +10,26 @@
 
 window.botList = window.botList || [];
 
-function QuickBot() {
+function SJMBot() {
     this.name = "SJMBot";
-    this.keyAction = function(key) {w};
+    
+    this.toggleFollow = false;
+    
+    this.keyAction = function(key) {
+        if (81 == key.keyCode) {
+            console.log("Toggle Follow Mouse!");
+            this.toggleFollow = !this.toggleFollow;
+        }
+    };
+
     this.displayText = function() {return [s];};
     this.mainLoop = function() {
-        return [screenToGameX(getMouseX()),
-                screenToGameY(getMouseY())];
+        if (toggleFollow) {
+            return [screenToGameX(getMouseX()),
+                    screenToGameY(getMouseY())];
+        }                    
     };
 }
-window.botList.push(new QuickBot());
+window.botList.push(new SJMBot());
 
 window.updateBotList();
