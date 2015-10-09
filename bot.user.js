@@ -15,7 +15,7 @@ function QuickBot() {
     this.keyAction = function(key) {w};
     this.displayText = function() {return [s];};
     this.mainLoop = function() {
-        return [screenToGameX(getMouseX(d)),
+        return [screenToGameX(getMouseX()),
                 screenToGameY(getMouseY())];
     };
 }
