@@ -115,15 +115,22 @@ function AposBot() {
     this.name = "AposSplitBot " + aposBotVersion;
 
     this.toggleFollow = false;
+    this.toggleSplit = true;
+    this.rejoinTime = 0
+    
     this.keyAction = function(key) {
         if (81 == key.keyCode) {
             console.log("Toggle Follow Mouse!");
             this.toggleFollow = !this.toggleFollow;
         }
+        if (83 == key.keyCode) {
+            console.log("Toggle Split Mode!");
+            this.toggleSplit = !this.toggleSplit;
+        }
     };
 
     this.displayText = function() {
-        return ["Q - Follow Mouse: " + (this.toggleFollow ? "On" : "Off")];
+        return ["Q - Follow Mouse: " + (this.toggleFollow ? "On" : "Off"), "S - Split Mode: " + (this.toggleSplit ? "On" : "Off") + " " + (this.rejoinTime > this.previousLoopTime ? "Rejoing in: " + this.rejoinTime - this.previousLoopTime: "")];
     };
 
     // Using mod function instead the prototype directly as it is very slow
@@ -237,7 +244,7 @@ function AposBot() {
     },
 
     this.canSplit = function(player1, player2) {
-        return this.compareSize(player1, player2, 2.8) && !this.compareSize(player1, player2, 4);
+        return this.compareSize(player1, player2, 2.8);
     };
 
     this.isItMe = function(player, cell) {
@@ -322,15 +329,35 @@ function AposBot() {
         return ((mass*0.02) + 30);
     };
 
+    this.isCloseAndEdible = function(blob, cell) {
+        //console.log("isCloseAndEdible")
+        if (cell.size * 1.25 <= blob.size) {
+            //console.log("isCloseAndEdible small enough")
+            if (this.computeDistance(blob.x, blob.y, cell.x, cell.y, cell.size) < 150){
+                //console.log("isCloseAndEdible close enough")
+                 //console.log("Found edible cell.")
+                return true;
+            } else {
+                //console.log("isCloseAndEdible not close enough")
+                return false;
+            }          
+            
+        } else {
+            //console.log("isCloseAndEdible not small enough")
+            return false;
+        }
+    };
+    
     this.separateListBasedOnFunction = function(that, listToUse, blob) {
         var foodElementList = [];
         var threatList = [];
         var virusList = [];
         var splitTargetList = [];
-
+        var mergeList = [];
+        var eatQuickList = [];
         var player = getPlayer();
         
-        var mergeList = [];
+        
 
         Object.keys(listToUse).forEach(function(element, index) {
             var isMe = that.isItMe(player, listToUse[element]);
@@ -354,8 +381,10 @@ function AposBot() {
                         splitTargetList.push(listToUse[element]);
                         //foodElementList.push(listToUse[element]);
                         mergeList.push(listToUse[element]);
+                        if (that.isCloseAndEdible(blob, listToUse[element])==true) {eatQuickList.push(listToUse[element]);}
                 }
                 else {if (that.isVirus(null, listToUse[element])==false) {mergeList.push(listToUse[element]);}
+                      if (that.isCloseAndEdible(blob, listToUse[element])==true) {eatQuickList.push(listToUse[element]);}
                     }
             }/*else if(isMe && (getBlobCount(getPlayer()) > 0)){
                 //Attempt to make the other cell follow the mother one
@@ -369,9 +398,10 @@ function AposBot() {
         }
         
         //console.log("Merglist length: " +  mergeList.length)
-        //cell merging
-        for (var i = 0; i < mergeList.length; i++) {
-            for (var z = 0; z < mergeList.length; z++) {
+        //cell merging        
+        var zStart = 1;
+        for (var i = 0; i < mergeList.length - 1;i++) {
+            for (var z = zStart;z < mergeList.length;z++) {
                 if (z != i && that.isMerging(mergeList[i], mergeList[z])) { //z != i && 
                         //found cells that appear to be merging - if they constitute a threat add them to the theatlist
                         
@@ -393,12 +423,16 @@ function AposBot() {
                              //IT'S DANGER!
                             threatList.push(newThreat);
                         }   
-                                          
+                        //mergeList.splice(i, 1, newThreat); // This way more than 1 cell can be merged onto one bigger cell properly
+                        //mergeList.splice(z, 1); // May or may not want to splice this one imo you should but idk for sure you make your call on this
+                        //z--; //bc reasons  
+                        //i--;
                 }
             }
+            zStart +=1
         }
         
-        return [foodList, threatList, virusList, splitTargetList];
+        return [foodList, threatList, virusList, splitTargetList, eatQuickList];
     };
 
     this.getAll = function(blob) {
@@ -896,7 +930,7 @@ function AposBot() {
                 for (var k = 0; k < player.length; k++) {
                     if (true) {
                         drawPoint(player[k].x, player[k].y + player[k].size, 0, "" + (getLastUpdate() - player[k].birth) + " / " + (30000 + (player[k].birthMass * 57) - (getLastUpdate() - player[k].birth)) + " / " + player[k].birthMass);
-                    }player.length -1
+                    }
                 }
 
 
@@ -922,6 +956,8 @@ function AposBot() {
                     var allPossibleViruses = allIsAll[2];
                     //The split targets are stored in element 2 of allIsAll
                     var allPossibleVictims = allIsAll[3];
+                    var allEasyWins = allIsAll[4];
+                    
                     var victim = null;
                     var range = player[k].size + this.splitDistance  
                     var threatInRange = false
@@ -982,7 +1018,7 @@ function AposBot() {
                         futureThreat.x += enemyXOffset;
                         futureThreat.y += enemyYOffset;
                         futureThreat.enemyDist = this.computeDistance(futureThreat.x, futureThreat.y, player[k].x, player[k].y, futureThreat.size);
-                        
+                        q
                        
                         */
                         //multi cell control
@@ -1010,7 +1046,7 @@ function AposBot() {
                          */
                     }
                     
-                    allPossibleThreats = predictiveThreats;
+                    allPossibleThreats = allPossibleThreats.concat(predictiveThreats);
                   
                     /*allPossibleThreats.sort(function(a, b){
                         return a.enemyDist-b.enemyDist;
@@ -1249,7 +1285,13 @@ function AposBot() {
                         //tempMoveX = destination[0];
                         //tempMoveY = destination[1];
 
-                    } else if (goodAngles.length > 0) {
+                    } else if (allEasyWins.length > 0){
+                         console.log("Easy win!! yay");
+                         var ang = this.getAngle(allEasyWins[0].x, allEasyWins[0].y, player[k].x, player[k].y);
+                         var distance = this.computeDistance(player[k].x, player[k].y, allEasyWins[0].x, allEasyWins[0].y);
+                         drawLine(player[k].x, player[k].y, allEasyWins[0].x, allEasyWins[0].y, 5);
+                         destinationChoices = this.followAngle(ang, player[k].x, player[k].y, distance);
+                    }else if (goodAngles.length > 0) {
                         this.followtime = 0;
                         var bIndex = goodAngles[0];
                         var biggest = goodAngles[0][1];
@@ -1293,7 +1335,7 @@ function AposBot() {
                         var line1 = this.followAngle(finalAngle,player[k].x,player[k].y,f.verticalDistance());
                         drawLine(player[k].x, player[k].y, line1[0], line1[1], 2);
                         destinationChoices.push(line1);
-                         }*/ else if (victim !== null) {
+                         }*/ else if (victim !== null && this.toggleSplit == true) {
                             //split vitim found
                             //work out where they are going
                             var victimX = victim.x;
@@ -1320,9 +1362,13 @@ function AposBot() {
                             var shiftedAngle = this.shiftAngle(obstacleAngles, this.getAngle(victimX, victimY, player[k].x, player[k].y), [0, 360]);
                             destinationChoices = this.followAngle(shiftedAngle, player[k].x, player[k].y, distance);
                             drawLine(player[k].x, player[k].y, victimX, victimY, 5);
-                            if (distance < range/1.7 && threatInRange == false && this.followtime > 40) { //&& player.length == 1
+                            if (distance < range/1.7 && threatInRange == false && this.followtime > 40 && this.rejoinTime < this.previousLoopTime) { //&& player.length == 1
+                                  if (player.length == 1) {
+                                      this.rejoinTime = Math.round(new Date().getTime() + this.getTimeToRemerge(this.getMass(player[k].size)) * 1000)
+                                  }
                                   //console.log("spliting");
                                   this.followtime = 0;
+                                     
                                   setTimeout(split, 0);
                                   }
                             
