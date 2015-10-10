@@ -130,7 +130,7 @@ function AposBot() {
     };
 
     this.displayText = function() {
-        return ["Q - Follow Mouse: " + (this.toggleFollow ? "On" : "Off"), "S - Split Mode: " + (this.toggleSplit ? "On" : "Off") + " " + (this.rejoinTime > this.previousLoopTime ? "Rejoing in: " + this.rejoinTime - this.previousLoopTime: "")];
+        return ["Q - Follow Mouse: " + (this.toggleFollow ? "On" : "Off"), "S - Split Mode: " + (this.toggleSplit ? "On" : "Off"), (this.rejoinTime > this.previousLoopTime ? this.rejoinTime - this.previousLoopTime : "")];
     };
 
     // Using mod function instead the prototype directly as it is very slow
@@ -244,7 +244,7 @@ function AposBot() {
     },
 
     this.canSplit = function(player1, player2) {
-        return this.compareSize(player1, player2, 2.8);
+        return this.compareSize(player1, player2, 2.8) && !this.compareSize(player1, player2, 20);
     };
 
     this.isItMe = function(player, cell) {
@@ -1046,7 +1046,7 @@ function AposBot() {
                          */
                     }
                     
-                    allPossibleThreats = allPossibleThreats.concat(predictiveThreats);
+                    allPossibleThreats = predictiveThreats;
                   
                     /*allPossibleThreats.sort(function(a, b){
                         return a.enemyDist-b.enemyDist;
@@ -1364,7 +1364,8 @@ function AposBot() {
                             drawLine(player[k].x, player[k].y, victimX, victimY, 5);
                             if (distance < range/1.7 && threatInRange == false && this.followtime > 40 && this.rejoinTime < this.previousLoopTime) { //&& player.length == 1
                                   if (player.length == 1) {
-                                      this.rejoinTime = Math.round(new Date().getTime() + this.getTimeToRemerge(this.getMass(player[k].size)) * 1000)
+                                      console.log(new Date().getTime() + (this.getTimeToRemerge(this.getMass(player[k].size)) * 1000))
+                                      this.rejoinTime = new Date().getTime() + (this.getTimeToRemerge(this.getMass(player[k].size)) * 1000)
                                   }
                                   //console.log("spliting");
                                   this.followtime = 0;
